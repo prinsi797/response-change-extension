@@ -1,3 +1,12 @@
+console.log('content page load');
+
+function transformResponse(originalData) {
+    return {
+        message: "success",
+        status: 1,
+        data: Array.isArray(originalData) ? originalData : [originalData]
+    };
+}
 const XHR = XMLHttpRequest.prototype;
 const open = XHR.open;
 const send = XHR.send;
@@ -18,29 +27,21 @@ XHR.setRequestHeader = function(header, value) {
 
 XHR.send = function(postData) {
     this.addEventListener('load', function() {
-        const myUrl = this._url;
-        
-        if (myUrl.includes('/api/categories')) {
+        try {
             const responseBody = this.response;
-            try {
-                const data = JSON.parse(responseBody);
-                if (data.length >= 2) {
-                    let temp = data[0];
-                    data[0] = data[1];
-                    data[1] = temp;
-                }
-                
-                Object.defineProperty(this, 'response', {
-                    value: JSON.stringify(data)
-                });
-                Object.defineProperty(this, 'responseText', {
-                    value: JSON.stringify(data)
-                });
-                
-                console.log('Modified API Response:', data);
-            } catch (err) {
-                console.error('Error modifying response:', err);
-            }
+            const originalData = JSON.parse(responseBody);
+            const transformedData = transformResponse(originalData);
+            
+            Object.defineProperty(this, 'response', {
+                value: JSON.stringify(transformedData)
+            });
+            Object.defineProperty(this, 'responseText', {
+                value: JSON.stringify(transformedData)
+            });
+            
+            console.log('Modified API Response:', transformedData);
+        } catch (err) {
+            console.error('Error modifying response:', err);
         }
     });
     return send.apply(this, arguments);
@@ -50,24 +51,19 @@ const originalFetch = window.fetch;
 window.fetch = async function(...args) {
     const response = await originalFetch(...args);
     
-    if (args[0].includes('/api/categories')) {
-        const clone = response.clone();
-        const data = await clone.json();
+    const clone = response.clone();
+    try {
+        const originalData = await clone.json();
+        const transformedData = transformResponse(originalData);
         
-        if (data.length >= 2) {
-            let temp = data[0];
-            data[0] = data[1];
-            data[1] = temp;
-        }
-        
-        return new Response(JSON.stringify(data), {
+        return new Response(JSON.stringify(transformedData), {
             status: response.status,
             statusText: response.statusText,
             headers: response.headers
         });
+    } catch (error) {
+        return response;
     }
-    
-    return response;
 };
 
 console.log('Content script is running and API interceptor is active!');
